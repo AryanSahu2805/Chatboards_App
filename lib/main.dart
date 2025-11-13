@@ -5,6 +5,7 @@ import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/message_boards_screen.dart';
+import 'screens/auth/auth_init.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,9 +55,11 @@ class AuthenticationWrapper extends StatelessWidget {
         }
 
         // If user is logged in, show message boards
-        if (snapshot.hasData && snapshot.data != null) {
-          return const MessageBoardsScreen();
-        }
+            if (snapshot.hasData && snapshot.data != null) {
+              // Wrap the signed-in area with AuthInit which will ensure a
+              // corresponding Firestore user document exists for the auth user.
+              return const AuthInit(childIfSignedIn: MessageBoardsScreen());
+            }
 
         // If user is not logged in, show login screen
         return const LoginScreen();

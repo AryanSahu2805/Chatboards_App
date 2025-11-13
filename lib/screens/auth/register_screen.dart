@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_screen.dart';
+import '../../main.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -77,20 +78,88 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (mounted) {
         _showMessage('Registration successful!');
-        // StreamBuilder will automatically navigate
+        // Navigate to auth wrapper (clears stack) so user is taken to the
+        // authenticated area (MessageBoardsScreen) after registration.
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const AuthenticationWrapper()),
+          (route) => false,
+        );
       }
     } on FirebaseAuthException catch (e) {
-      String message = 'Registration failed';
+      // Provide more specific feedback for common FirebaseAuth errors.
+      // Also log the full exception to console to help debugging.
+      // ignore: avoid_print
+      print('Register error (${e.code}): ${e.message}');
+
+      String message;
       if (e.code == 'email-already-in-use') {
         message = 'This email is already registered';
       } else if (e.code == 'weak-password') {
         message = 'Password should be at least 6 characters';
       } else if (e.code == 'invalid-email') {
         message = 'Invalid email address';
+      } else if (e.code == 'operation-not-allowed') {
+        message = 'Email/password sign-in is disabled for this project. Enable it in Firebase Console -> Authentication -> Sign-in method.';
+      } else {
+        // Fallback: include code/message so you can see why registration failed in the app UI
+        message = 'Registration failed (${e.code}): ${e.message ?? 'unknown error'}';
       }
+
       _showMessage(message, isError: true);
     } catch (e) {
-      _showMessage('An error occurred: $e', isError: true);
+      // Log error for debugging. If auth succeeded but Pigeon decoding failed
+      // the FirebaseAuth currentUser will be non-null — treat as success.
+      // ignore: avoid_print
+      print('Register error: $e');
+      // ignore: avoid_print
+      FlutterError.dumpErrorToConsole(FlutterErrorDetails(exception: e));
+
+      final current = FirebaseAuth.instance.currentUser;
+        if (current != null) {
+        // Create the Firestore user document now that auth succeeded but
+        // the plugin/platform message decoding caused an exception.
+        final String displayName = '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}';
+        try {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(current.uid)
+              .set({
+            'uid': current.uid,
+            'email': _emailController.text.trim(),
+            'firstName': _firstNameController.text.trim(),
+            'lastName': _lastNameController.text.trim(),
+            'displayName': displayName,
+            'role': _selectedRole,
+            'registrationDate': FieldValue.serverTimestamp(),
+            'dateOfBirth': null,
+          });
+
+          // Ensure the FirebaseAuth display name is set as well.
+          try {
+            await current.updateDisplayName(displayName);
+          } catch (_) {
+            // ignore errors updating auth display name
+          }
+
+          if (mounted) {
+            _showMessage('Registration successful (fallback)');
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const AuthenticationWrapper()),
+              (route) => false,
+            );
+          }
+        } catch (writeError) {
+          // If writing to Firestore fails, still inform user about registration
+          // and log the error so they can retry updating profile later.
+          // ignore: avoid_print
+          print('Failed to write fallback user document: $writeError');
+          if (mounted) {
+            _showMessage('Registration succeeded but saving profile failed. You can update your profile later.', isError: true);
+          }
+        }
+      } else {
+        _showMessage('An error occurred: ${e.runtimeType} - ${e.toString()}', isError: true);
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);

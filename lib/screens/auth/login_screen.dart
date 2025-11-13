@@ -69,7 +69,30 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       _showMessage(message, isError: true);
     } catch (e) {
-      _showMessage('An error occurred: $e', isError: true);
+      // If Pigeon/platform type casting error occurs but FirebaseAuth actually
+      // completed sign-in, read currentUser as a fallback (some plugin
+      // combinations incorrectly decode the Pigeon object but auth still works).
+      // Log full stack trace for debugging.
+      // ignore: avoid_print
+      print('Login error: $e');
+      // ignore: avoid_print
+      FlutterError.dumpErrorToConsole(FlutterErrorDetails(exception: e));
+
+      final current = FirebaseAuth.instance.currentUser;
+      if (current != null) {
+        // Treat as success (auth succeeded but message decoding failed).
+        if (mounted) {
+          _showMessage('Login successful (fallback)');
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) => const AuthenticationWrapper(),
+            ),
+            (route) => false,
+          );
+        }
+      } else {
+        _showMessage('An error occurred: ${e.runtimeType} - ${e.toString()}', isError: true);
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);

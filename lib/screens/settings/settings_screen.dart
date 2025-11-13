@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../main.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -129,7 +130,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _logout() async {
-    await FirebaseAuth.instance.signOut();
+    setState(() => _isLoading = true);
+    try {
+      await FirebaseAuth.instance.signOut();
+      if (!mounted) return;
+      // Clear navigation stack and show authentication wrapper (login)
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const AuthenticationWrapper()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Logout failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -243,7 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton.icon(
-              onPressed: _logout,
+              onPressed: _isLoading ? null : _logout,
               icon: const Icon(Icons.logout),
               label: const Text('Logout'),
               style: ElevatedButton.styleFrom(
