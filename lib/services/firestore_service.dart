@@ -42,10 +42,15 @@ class FirestoreService {
   // Get user stream (real-time updates)
   Stream<UserModel?> getUserStream(String uid) {
     return _usersCollection.doc(uid).snapshots().map((doc) {
-      if (doc.exists) {
-        return UserModel.fromSnapshot(doc);
+      try {
+        if (doc.exists) {
+          return UserModel.fromSnapshot(doc);
+        }
+        return null;
+      } catch (e) {
+        // Return null if there's an error parsing the document
+        return null;
       }
-      return null;
     });
   }
 

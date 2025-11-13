@@ -34,15 +34,20 @@ class _ChatScreenState extends State<ChatScreen> {
     if (user == null) return;
 
     try {
-      // Get user data from Firestore
-      final userDoc = await FirestoreFirestore.instance
+      // Get user data from Firestore - FIXED
+      final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
 
-      final userName = userDoc.exists
-          ? '${userDoc.data()?['firstName']} ${userDoc.data()?['lastName']}'
-          : user.email ?? 'Anonymous';
+      String userName;
+      if (userDoc.exists && userDoc.data() != null) {
+        final data = userDoc.data()!;
+        userName = data['displayName'] as String? ?? 
+                   '${data['firstName']} ${data['lastName']}';
+      } else {
+        userName = user.email ?? 'Anonymous';
+      }
 
       await _firestoreService.sendMessage(
         boardId: widget.board.id,
@@ -64,19 +69,39 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send message: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send message: $e')),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: Text(widget.board.name),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _getIcon(widget.board.iconName),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(widget.board.name),
+          ],
+        ),
         backgroundColor: Color(widget.board.colorValue),
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: Column(
         children: [
@@ -92,8 +117,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 }
 
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
+                  return Center(
+                    child: CircularProgressIndicator(
+                      color: Color(widget.board.colorValue),
+                    ),
                   );
                 }
 
@@ -106,10 +133,17 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.chat_bubble_outline,
-                          size: 64,
-                          color: Colors.grey.shade400,
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Color(widget.board.colorValue).withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 64,
+                            color: Color(widget.board.colorValue),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -117,6 +151,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           style: TextStyle(
                             fontSize: 18,
                             color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -134,17 +169,25 @@ class _ChatScreenState extends State<ChatScreen> {
 
                 return ListView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final message = messages[index];
                     final isCurrentUser =
                         message.userId == FirebaseAuth.instance.currentUser?.uid;
+                    final showDate = index == 0 ||
+                        !_isSameDay(
+                            messages[index - 1].timestamp, message.timestamp);
 
-                    return _MessageBubble(
-                      message: message,
-                      isCurrentUser: isCurrentUser,
-                      boardColor: Color(widget.board.colorValue),
+                    return Column(
+                      children: [
+                        if (showDate) _DateDivider(date: message.timestamp),
+                        _ImprovedMessageBubble(
+                          message: message,
+                          isCurrentUser: isCurrentUser,
+                          boardColor: Color(widget.board.colorValue),
+                        ),
+                      ],
                     );
                   },
                 );
@@ -160,7 +203,7 @@ class _ChatScreenState extends State<ChatScreen> {
               boxShadow: [
                 BoxShadow(
                   color: Colors.grey.shade300,
-                  blurRadius: 4,
+                  blurRadius: 10,
                   offset: const Offset(0, -2),
                 ),
               ],
@@ -169,30 +212,41 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      decoration: InputDecoration(
-                        hintText: 'Type a message...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 10,
-                        ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(24),
                       ),
-                      maxLines: null,
-                      textCapitalization: TextCapitalization.sentences,
+                      child: TextField(
+                        controller: _messageController,
+                        decoration: const InputDecoration(
+                          hintText: 'Type a message...',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                        ),
+                        maxLines: null,
+                        textCapitalization: TextCapitalization.sentences,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  CircleAvatar(
-                    backgroundColor: Color(widget.board.colorValue),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Color(widget.board.colorValue),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(widget.board.colorValue).withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
                     child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white),
+                      icon: const Icon(Icons.send_rounded, color: Colors.white),
                       onPressed: _sendMessage,
                     ),
                   ),
@@ -204,14 +258,78 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
+
+  IconData _getIcon(String iconName) {
+    switch (iconName) {
+      case 'gamepad':
+        return Icons.sports_esports_rounded;
+      case 'business':
+        return Icons.business_center_rounded;
+      case 'health':
+        return Icons.favorite_rounded;
+      case 'school':
+        return Icons.school_rounded;
+      default:
+        return Icons.chat_bubble_rounded;
+    }
+  }
+
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
+  }
 }
 
-class _MessageBubble extends StatelessWidget {
+class _DateDivider extends StatelessWidget {
+  final DateTime date;
+
+  const _DateDivider({required this.date});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(date.year, date.month, date.day);
+    
+    String dateText;
+    if (messageDate == today) {
+      dateText = 'Today';
+    } else if (messageDate == today.subtract(const Duration(days: 1))) {
+      dateText = 'Yesterday';
+    } else {
+      dateText = DateFormat('MMM d, yyyy').format(date);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: Colors.grey.shade300)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              dateText,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: Colors.grey.shade300)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ImprovedMessageBubble extends StatelessWidget {
   final Message message;
   final bool isCurrentUser;
   final Color boardColor;
 
-  const _MessageBubble({
+  const _ImprovedMessageBubble({
     required this.message,
     required this.isCurrentUser,
     required this.boardColor,
@@ -219,53 +337,96 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: isCurrentUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        padding: const EdgeInsets.all(12),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        decoration: BoxDecoration(
-          color: isCurrentUser ? boardColor : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Username
-            if (!isCurrentUser)
-              Text(
-                message.userName,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment:
+            isCurrentUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!isCurrentUser) ...[
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: boardColor.withOpacity(0.2),
+              child: Text(
+                message.userName[0].toUpperCase(),
                 style: TextStyle(
+                  color: boardColor,
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  color: isCurrentUser ? Colors.white70 : Colors.black87,
+                  fontSize: 14,
                 ),
               ),
-            if (!isCurrentUser) const SizedBox(height: 4),
-
-            // Message
-            Text(
-              message.message,
-              style: TextStyle(
-                fontSize: 16,
-                color: isCurrentUser ? Colors.white : Colors.black87,
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isCurrentUser ? boardColor : Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(20),
+                  topRight: const Radius.circular(20),
+                  bottomLeft: Radius.circular(isCurrentUser ? 20 : 4),
+                  bottomRight: Radius.circular(isCurrentUser ? 4 : 20),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.shade300,
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!isCurrentUser) ...[
+                    Text(
+                      message.userName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: boardColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                  Text(
+                    message.message,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: isCurrentUser ? Colors.white : Colors.black87,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    DateFormat('h:mm a').format(message.timestamp),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isCurrentUser
+                          ? Colors.white.withOpacity(0.8)
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 4),
-
-            // Timestamp
-            Text(
-              DateFormat('MMM d, h:mm a').format(message.timestamp),
-              style: TextStyle(
-                fontSize: 10,
-                color: isCurrentUser ? Colors.white70 : Colors.grey.shade600,
+          ),
+          if (isCurrentUser) ...[
+            const SizedBox(width: 8),
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: boardColor.withOpacity(0.2),
+              child: Icon(
+                Icons.person,
+                size: 18,
+                color: boardColor,
               ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }

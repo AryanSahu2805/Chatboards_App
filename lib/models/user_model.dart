@@ -43,13 +43,28 @@ class UserModel {
 
   // Create from Firestore document
   factory UserModel.fromMap(Map<String, dynamic> map) {
+    DateTime registrationDate;
+    if (map['registrationDate'] != null) {
+      if (map['registrationDate'] is Timestamp) {
+        registrationDate = (map['registrationDate'] as Timestamp).toDate();
+      } else if (map['registrationDate'] is DateTime) {
+        registrationDate = map['registrationDate'] as DateTime;
+      } else {
+        // Fallback to current date if invalid format
+        registrationDate = DateTime.now();
+      }
+    } else {
+      // Fallback to current date if null
+      registrationDate = DateTime.now();
+    }
+
     return UserModel(
       uid: map['uid'] ?? '',
       email: map['email'] ?? '',
       firstName: map['firstName'] ?? '',
       lastName: map['lastName'] ?? '',
       role: map['role'] ?? 'user',
-      registrationDate: (map['registrationDate'] as Timestamp).toDate(),
+      registrationDate: registrationDate,
       dateOfBirth: map['dateOfBirth'],
       displayName: map['displayName'],
     );
@@ -57,7 +72,10 @@ class UserModel {
 
   // Create from Firestore DocumentSnapshot
   factory UserModel.fromSnapshot(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final data = doc.data();
+    if (data == null || data is! Map<String, dynamic>) {
+      throw Exception('Invalid document data');
+    }
     return UserModel.fromMap(data);
   }
 

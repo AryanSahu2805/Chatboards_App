@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/user_model.dart';
-import '../../services/firestore_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -17,7 +16,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordController = TextEditingController();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
-  final _firestoreService = FirestoreService();
   
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -57,21 +55,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passwordController.text.trim(),
       );
 
-      // Create user document in Firestore
-      final user = UserModel(
-        uid: userCredential.user!.uid,
-        email: _emailController.text.trim(),
-        firstName: _firstNameController.text.trim(),
-        lastName: _lastNameController.text.trim(),
-        role: _selectedRole,
-        registrationDate: DateTime.now(),
-      );
+      // FIXED: Create user document in Firestore with proper data
+      final String displayName = '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}';
+      
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set({
+        'uid': userCredential.user!.uid,
+        'email': _emailController.text.trim(),
+        'firstName': _firstNameController.text.trim(),
+        'lastName': _lastNameController.text.trim(),
+        'displayName': displayName,
+        'role': _selectedRole,
+        'registrationDate': FieldValue.serverTimestamp(),
+        'dateOfBirth': null,
+      });
 
-      await _firestoreService.createUser(user);
+      // Update Firebase Auth display name
+      await userCredential.user!.updateDisplayName(displayName);
 
       if (mounted) {
         _showMessage('Registration successful!');
-        // Navigate to home screen (StreamBuilder will handle this)
+        // StreamBuilder will automatically navigate
       }
     } on FirebaseAuthException catch (e) {
       String message = 'Registration failed';
@@ -119,15 +125,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Icon
                         Icon(
                           Icons.person_add_outlined,
                           size: 64,
                           color: Colors.blue.shade700,
                         ),
                         const SizedBox(height: 16),
-
-                        // Title
                         Text(
                           'Create Account',
                           style: TextStyle(

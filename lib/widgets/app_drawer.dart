@@ -15,21 +15,43 @@ class AppDrawer extends StatelessWidget {
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          UserAccountsDrawerHeader(
+          // FIXED HEADER
+          DrawerHeader(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [Colors.blue.shade700, Colors.blue.shade900],
               ),
             ),
-            currentAccountName: Text(user?.displayName ?? 'User'),
-            currentAccountEmail: Text(user?.email ?? ''),
-            accountPicture: CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Icon(
-                Icons.person,
-                size: 40,
-                color: Colors.blue.shade700,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                CircleAvatar(
+                  backgroundColor: Colors.white,
+                  radius: 30,
+                  child: Icon(
+                    Icons.person,
+                    size: 40,
+                    color: Colors.blue.shade700,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  user?.displayName ?? 'User',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  user?.email ?? '',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
             ),
           ),
 

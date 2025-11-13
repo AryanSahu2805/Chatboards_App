@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../main.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -47,6 +48,13 @@ class _LoginScreenState extends State<LoginScreen> {
       
       if (mounted) {
         _showMessage('Login successful!');
+        // Navigate to AuthenticationWrapper so it can detect auth state change
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (context) => const AuthenticationWrapper(),
+          ),
+          (route) => false,
+        );
       }
     } on FirebaseAuthException catch (e) {
       String message = 'Login failed';
@@ -56,10 +64,12 @@ class _LoginScreenState extends State<LoginScreen> {
         message = 'Wrong password';
       } else if (e.code == 'invalid-email') {
         message = 'Invalid email address';
+      } else if (e.code == 'invalid-credential') {
+        message = 'Invalid email or password';
       }
       _showMessage(message, isError: true);
     } catch (e) {
-      _showMessage('An error occurred', isError: true);
+      _showMessage('An error occurred: $e', isError: true);
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
